@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Echo's Threads</title>
+    <style>
+        body { font-family: sans-serif; background-color: #E0F2FE; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        
+        /* 发布框 */
+        .input-section { background: white; width: 100%; max-width: 500px; border-radius: 20px; padding: 20px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        textarea { border: 1px solid #ddd; border-radius: 10px; padding: 10px; resize: none; outline: none; font-size: 15px; }
+        #post-btn { background: black; color: white; border: none; padding: 10px 20px; border-radius: 20px; cursor: pointer; align-self: flex-end; font-weight: bold; }
+        
+        /* 帖子列表 */
+        #threads-container { width: 100%; max-width: 500px; }
+        .thread-card { background: white; border-radius: 20px; padding: 20px; margin-bottom: 15px; position: relative; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        
+        /* 删除按钮：右上角红色小圆点 */
+        .del-btn { position: absolute; top: 15px; right: 15px; background: #ff4d4f; color: white; width: 22px; height: 22px; border-radius: 50%; text-align: center; line-height: 20px; cursor: pointer; font-size: 14px; }
+        
+        .user-name { font-weight: bold; color: #1e293b; font-size: 16px; }
+        .post-time { font-size: 12px; color: #999; margin-top: 4px; }
+        .content { color: #333; line-height: 1.6; margin: 15px 0; white-space: pre-wrap; }
+        
+        /* 互动按钮 */
+        .actions { border-top: 1px solid #f0f0f0; padding-top: 12px; display: flex; gap: 25px; font-size: 18px; color: #666; }
+        .action-item { cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div class="input-section">
+        <textarea id="post-input" rows="3" placeholder="Echo，今天想发点什么？"></textarea>
+        <button id="post-btn" onclick="addPost()">发布</button>
+    </div>
+
+    <div id="threads-container"></div>
+
+    <script>
+        // 1. 初始化：从本地存储载入数据
+        window.onload = function() {
+            const savedData = localStorage.getItem('echo_threads_data');
+            if(savedData) {
+                const posts = JSON.parse(savedData);
+                posts.forEach(p => renderPost(p.text, p.time, p.id));
+            }
+        }
+
+        // 2. 点击发布按钮
+        function addPost() {
+            const input = document.getElementById('post-input');
+            const val = input.value.trim();
+            if(!val) return;
+
+            const time = new Date().toLocaleString();
+            const id = "post_" + Date.now();
+
+            renderPost(val, time, id); // 显示在页面
+
+            // 保存到本地
+            const posts = JSON.parse(localStorage.getItem('echo_threads_data') || "[]");
+            posts.unshift({ text: val, time: time, id: id });
+            localStorage.setItem('echo_threads_data', JSON.stringify(posts));
+
+            input.value = ""; // 清空输入框
+        }
+
+        // 3. 把帖子画在屏幕上
+        function renderPost(text, time, id) {
+            const container = document.getElementById('threads-container');
+            const card = document.createElement('div');
+            card.className = 'thread-card';
+            card.id = id;
+
+            // 这里移除了所有 img 标签，只保留文字
+            card.innerHTML = `
+                <div class="del-btn" onclick="deletePost('${id}')">×</div>
+                <div class="user-name">@Echo</div>
+                <div class="post-time">${time}</div>
+                <p class="content">${text}</p >
+                <div class="actions">
+                    <span class="action-item" onclick="this.innerText=(this.innerText=='🤍'?'❤️':'🤍')">🤍</span>
+                    <span class="action-item" onclick="alert('评论功能开发中...')">💬</span>
+                    <span class="action-item" onclick="alert('转发成功！')">✈️</span>
+                </div>
+            `;
+            container.prepend(card);
+        }
+
+        // 4. 删除功能
+        function deletePost(id) {
+            if(!confirm("确定要删除这条动态吗？")) return;
+
+            // 从屏幕删除
+            const target = document.getElementById(id);
+            if(target) target.remove();
+
+            // 从存储中删除
+            let posts = JSON.parse(localStorage.getItem('echo_threads_data') || "[]");
+            posts = posts.filter(p => p.id !== id);
+            localStorage.setItem('echo_threads_data', JSON.stringify(posts));
+        }
+    </script>
+</body>
+</html>
