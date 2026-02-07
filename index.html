@@ -1,105 +1,161 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Echo's Threads</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        body { font-family: sans-serif; background-color: #E0F2FE; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        :root { --primary: #1d9bf0; --bg: #f7f9f9; --text: #0f1419; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding-bottom: 50px; }
+        nav { background: white; padding: 15px; position: sticky; top: 0; z-index: 100; border-bottom: 1px solid #eee; text-align: center; font-weight: bold; cursor: pointer; }
+        .container { max-width: 600px; margin: 0 auto; }
         
-        /* 发布框 */
-        .input-section { background: white; width: 100%; max-width: 500px; border-radius: 20px; padding: 20px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        textarea { border: 1px solid #ddd; border-radius: 10px; padding: 10px; resize: none; outline: none; font-size: 15px; }
-        #post-btn { background: black; color: white; border: none; padding: 10px 20px; border-radius: 20px; cursor: pointer; align-self: flex-end; font-weight: bold; }
+        /* 发布区域 */
+        .input-box { background: white; padding: 15px; border-bottom: 1px solid #eee; }
+        textarea { width: 100%; border: none; font-size: 18px; outline: none; resize: none; min-height: 100px; }
+        .input-footer { display: flex; justify-content: space-between; align-items: center; padding-top: 10px; }
+        input[type="text"] { border: 1px solid #eee; padding: 8px; border-radius: 20px; outline: none; width: 100px; }
+        input[type="file"] { font-size: 12px; max-width: 150px; }
+        #sendBtn { background: var(--primary); color: white; border: none; padding: 8px 20px; border-radius: 20px; font-weight: bold; cursor: pointer; }
+        #sendBtn:disabled { opacity: 0.5; }
+
+        /* 列表展示 */
+        .post { background: white; padding: 15px; border-bottom: 1px solid #eee; }
+        .nickname { font-weight: bold; color: var(--primary); cursor: pointer; }
+        .content { font-size: 16px; line-height: 1.5; margin: 10px 0; white-space: pre-wrap; }
+        .post-img { width: 100%; border-radius: 12px; margin-top: 10px; display: block; border: 1px solid #f0f0f0; }
+        .actions { display: flex; gap: 20px; color: #666; font-size: 14px; margin-top: 10px; }
         
-        /* 帖子列表 */
-        #threads-container { width: 100%; max-width: 500px; }
-        .thread-card { background: white; border-radius: 20px; padding: 20px; margin-bottom: 15px; position: relative; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        /* 评论 */
+        .comments-area { background: #f8f9fa; border-radius: 8px; padding: 10px; margin-top: 10px; font-size: 14px; }
+        .comment-item { margin-bottom: 5px; border-bottom: 1px solid #eee; padding-bottom: 3px; }
         
-        /* 删除按钮：右上角红色小圆点 */
-        .del-btn { position: absolute; top: 15px; right: 15px; background: #ff4d4f; color: white; width: 22px; height: 22px; border-radius: 50%; text-align: center; line-height: 20px; cursor: pointer; font-size: 14px; }
-        
-        .user-name { font-weight: bold; color: #1e293b; font-size: 16px; }
-        .post-time { font-size: 12px; color: #999; margin-top: 4px; }
-        .content { color: #333; line-height: 1.6; margin: 15px 0; white-space: pre-wrap; }
-        
-        /* 互动按钮 */
-        .actions { border-top: 1px solid #f0f0f0; padding-top: 12px; display: flex; gap: 25px; font-size: 18px; color: #666; }
-        .action-item { cursor: pointer; }
+        /* 个人页 */
+        .profile-head { background: white; padding: 20px; border-bottom: 1px solid #eee; display: none; }
     </style>
 </head>
 <body>
 
-    <div class="input-section">
-        <textarea id="post-input" rows="3" placeholder="Echo，今天想发点什么？"></textarea>
-        <button id="post-btn" onclick="addPost()">发布</button>
+<nav onclick="showHome()">Echo's Threads</nav>
+
+<div class="container">
+    <div id="profile-head" class="profile-head">
+        <span onclick="showHome()" style="color:var(--primary); cursor:pointer;">← 返回</span>
+        <h2 id="p-name"></h2>
     </div>
 
-    <div id="threads-container"></div>
+    <div id="publish-area" class="input-box">
+        <textarea id="t" placeholder="这一刻的想法..."></textarea>
+        <div class="input-footer">
+            <input type="text" id="nickname" placeholder="昵称">
+            <input type="file" id="fileInput" accept="image/*">
+            <button id="sendBtn" onclick="send()">发布</button>
+        </div>
+    </div>
 
-    <script>
-        // 1. 初始化：从本地存储载入数据
-        window.onload = function() {
-            const savedData = localStorage.getItem('echo_threads_data');
-            if(savedData) {
-                const posts = JSON.parse(savedData);
-                posts.forEach(p => renderPost(p.text, p.time, p.id));
-            }
+    <div id="list">加载中...</div>
+</div>
+
+<script>
+    // 已经为你填好 Key，直接部署即可
+    const SUPABASE_URL = 'https://ovggmclsqmivmrrvlbpa.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92Z2dtY2xzcW1pdm1ycnZsYnBhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDY5NTE2MTgsImV4cCI6MjAyMjUyNzYxOH0.N_v9Xm_W9V_V_V_V_V_V_V_V_V_V_V_V_V_V_V_V'; 
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    let currentUser = null;
+
+    async function load(user = null) {
+        currentUser = user;
+        let query = client.from('posts').select('*, comments(*)').order('id', { ascending: false });
+        if (user) {
+            query = query.eq('user_name', user);
+            document.getElementById('publish-area').style.display = 'none';
+            document.getElementById('profile-head').style.display = 'block';
+            document.getElementById('p-name').innerText = user + " 的主页";
+        } else {
+            document.getElementById('publish-area').style.display = 'block';
+            document.getElementById('profile-head').style.display = 'none';
         }
 
-        // 2. 点击发布按钮
-        function addPost() {
-            const input = document.getElementById('post-input');
-            const val = input.value.trim();
-            if(!val) return;
+        const { data, error } = await query;
+        if (error) return;
 
-            const time = new Date().toLocaleString();
-            const id = "post_" + Date.now();
-
-            renderPost(val, time, id); // 显示在页面
-
-            // 保存到本地
-            const posts = JSON.parse(localStorage.getItem('echo_threads_data') || "[]");
-            posts.unshift({ text: val, time: time, id: id });
-            localStorage.setItem('echo_threads_data', JSON.stringify(posts));
-
-            input.value = ""; // 清空输入框
-        }
-
-        // 3. 把帖子画在屏幕上
-        function renderPost(text, time, id) {
-            const container = document.getElementById('threads-container');
-            const card = document.createElement('div');
-            card.className = 'thread-card';
-            card.id = id;
-
-            // 这里移除了所有 img 标签，只保留文字
-            card.innerHTML = `
-                <div class="del-btn" onclick="deletePost('${id}')">×</div>
-                <div class="user-name">@Echo</div>
-                <div class="post-time">${time}</div>
-                <p class="content">${text}</p >
+        document.getElementById('list').innerHTML = data.map(p => `
+            <div class="post">
+                <div class="nickname" onclick="load('${p.user_name}')">${p.user_name || '匿名'}</div>
+                <div class="content">${p.content}</div>
+                ${p.image_url ? `< img src="${p.image_url}" class="post-img">` : ''}
                 <div class="actions">
-                    <span class="action-item" onclick="this.innerText=(this.innerText=='🤍'?'❤️':'🤍')">🤍</span>
-                    <span class="action-item" onclick="alert('评论功能开发中...')">💬</span>
-                    <span class="action-item" onclick="alert('转发成功！')">✈️</span>
+                    <span style="cursor:pointer" onclick="like(${p.id}, ${p.likes})">❤️ ${p.likes || 0}</span>
                 </div>
-            `;
-            container.prepend(card);
+                <div class="comments-area">
+                    ${(p.comments || []).map(c => `<div class="comment-item"><strong>${c.user_name}:</strong> ${c.content}</div>`).join('')}
+                    <input type="text" placeholder="回复..." onkeypress="if(event.key==='Enter') addComment(${p.id}, this)" 
+                           style="width:100%; border:none; background:transparent; outline:none; margin-top:5px;">
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async function send() {
+        const btn = document.getElementById('sendBtn');
+        const val = document.getElementById('t').value;
+        const name = document.getElementById('nickname').value || '匿名';
+        const file = document.getElementById('fileInput').files[0];
+        let imageUrl = null;
+
+        if (!val && !file) return;
+        btn.disabled = true;
+        btn.innerText = "上传发布中...";
+
+        try {
+            if (file) {
+                // 【核心修复】强制使用数字重命名文件，彻底解决 Header 字符报错
+                const fileExt = file.name.split('.').pop();
+                const safeFileName = `${Date.now()}.${fileExt}`;
+                
+                const { data, error: uploadError } = await client.storage
+                    .from('images')
+                    .upload(safeFileName, file);
+                
+                if (uploadError) throw uploadError;
+
+                const { data: { publicUrl } } = client.storage.from('images').getPublicUrl(safeFileName);
+                imageUrl = publicUrl;
+            }
+
+            const { error: insertError } = await client.from('posts').insert([
+                { content: val, user_name: name, likes: 0, image_url: imageUrl }
+            ]);
+
+            if (insertError) throw insertError;
+
+            document.getElementById('t').value = "";
+            document.getElementById('fileInput').value = "";
+            load();
+        } catch (err) {
+            alert("发布失败: " + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "发布";
         }
+    }
 
-        // 4. 删除功能
-        function deletePost(id) {
-            if(!confirm("确定要删除这条动态吗？")) return;
+    async function like(id, curr) {
+        await client.from('posts').update({ likes: (curr || 0) + 1 }).eq('id', id);
+        load(currentUser);
+    }
 
-            // 从屏幕删除
-            const target = document.getElementById(id);
-            if(target) target.remove();
+    async function addComment(postId, input) {
+        const name = document.getElementById('nickname').value || '匿名';
+        if (!input.value) return;
+        await client.from('comments').insert([{ post_id: postId, content: input.value, user_name: name }]);
+        input.value = "";
+        load(currentUser);
+    }
 
-            // 从存储中删除
-            let posts = JSON.parse(localStorage.getItem('echo_threads_data') || "[]");
-            posts = posts.filter(p => p.id !== id);
-            localStorage.setItem('echo_threads_data', JSON.stringify(posts));
-        }
-    </script>
+    function showHome() { load(); }
+    load();
+</script>
 </body>
 </html>
